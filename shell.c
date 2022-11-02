@@ -8,12 +8,21 @@
 #include <stdlib.h>
 #include <signal.h>
 
+void sigint(int signum){
+    if(signum == SIGINT) {
+        printf("SIGINT");
+
+    }
+    
+}
 
 void initialize(void)
 {
     /* This code will be called once at startup */
     if (prompt)
         prompt = "vush$ ";
+
+    signal(SIGINT, sigint);
 }
 
 int get_status(int returned_status, int err_status){
@@ -41,38 +50,27 @@ int exec_cmd(node_t *node)
     int status; 
     char* prog_name = node->command.program;
 
-    setuid(0);
-
     if(strcmp(prog_name, "exit") == 0) exit(atoi(node->command.argv[1]));
     else if(fork() == 0)
     {
         if(strcmp(prog_name, "cd") == 0) status = get_status(chdir(node->command.argv[1]), -2);
-        else {
-            
-            /*
-            char* prog_path = "/usr/bin/";
-            char* prog = malloc(strlen(prog_name) + strlen(prog_path) + 1);
-            prog[0] = '\0';
-            strcat(prog, prog_path);
-            prog[strlen(prog_path)] = '\0';
-            strcat(prog, prog_name);
-            */
-
-
-            status = get_status(execvp(prog_name, node->command.argv), -3);
-        }
+        else status = get_status(execvp(prog_name, node->command.argv), -3);
     }
     else wait(&status);
     
     return status;
 }
 
+int exec_cmd_print_err(node_t *node){
+    int status = exec_cmd(node);
+    if (status < 0) print_err(status);
+    return status;
+}
+
 void run_command(node_t *node)
 {
     /* Print parsed input for testing - comment this when running the tests! */
-    //print_tree(node);
 
-    int status;
 
     if (prompt)
         prompt = "vush$ ";
@@ -80,8 +78,25 @@ void run_command(node_t *node)
     switch (node->type)
     {
     case NODE_COMMAND:
-        status = exec_cmd(node);
-        if (status < 0) print_err(status);
+        exec_cmd_print_err(node);
+        break;
+
+    case NODE_SEQUENCE: ;
+        node_t* seq_n = node;
+
+       
+            while(1)
+            {
+                print_tree(seq_n);
+                exec_cmd_print_err(seq_n->sequence.first);
+                seq_n = seq_n->sequence.second;
+
+                if(seq_n->type == NODE_COMMAND){
+                    //exec_cmd_print_err(seq_n);
+                    break;
+                }
+            }
+    
         break;
     
     default:

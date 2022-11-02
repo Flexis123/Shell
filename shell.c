@@ -8,9 +8,11 @@
 #include <stdlib.h>
 #include <signal.h>
 
+int exec_pipe[2];
+
 void sigint(int signum){
     if(signum == SIGINT) {
-        printf("SIGINT");
+        printf("SIGINT\n");
 
     }
     
@@ -22,6 +24,8 @@ void initialize(void)
     if (prompt)
         prompt = "vush$ ";
 
+    printf("shell init\n");
+    pipe(exec_pipe);
     signal(SIGINT, sigint);
 }
 
@@ -71,33 +75,23 @@ void run_command(node_t *node)
 {
     /* Print parsed input for testing - comment this when running the tests! */
 
-
+   
+    int status;
     if (prompt)
         prompt = "vush$ ";
+
 
     switch (node->type)
     {
     case NODE_COMMAND:
+    
         exec_cmd_print_err(node);
         break;
-
-    case NODE_SEQUENCE: ;
-        node_t* seq_n = node;
-
-       
-            while(1)
-            {
-                print_tree(seq_n);
-                exec_cmd_print_err(seq_n->sequence.first);
-                seq_n = seq_n->sequence.second;
-
-                if(seq_n->type == NODE_COMMAND){
-                    //exec_cmd_print_err(seq_n);
-                    break;
-                }
-            }
-    
-        break;
+    case NODE_SEQUENCE:
+        while(node->type != NODE_COMMAND){
+            exec_cmd(node->sequence.first);
+            node = node->sequence.second;
+        }
     
     default:
         break;

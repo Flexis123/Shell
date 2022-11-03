@@ -24,7 +24,6 @@ void initialize(void)
     if (prompt)
         prompt = "vush$ ";
 
-    printf("shell init\n");
     pipe(exec_pipe);
     signal(SIGINT, sigint);
 }
@@ -53,13 +52,11 @@ int exec_cmd(node_t *node)
 {
     int status; 
     char* prog_name = node->command.program;
+    char** prog_argv = node->command.argv;
 
-    if(strcmp(prog_name, "exit") == 0) exit(atoi(node->command.argv[1]));
-    else if(fork() == 0)
-    {
-        if(strcmp(prog_name, "cd") == 0) status = get_status(chdir(node->command.argv[1]), -2);
-        else status = get_status(execvp(prog_name, node->command.argv), -3);
-    }
+    if(strcmp(prog_name, "exit") == 0) exit(atoi(prog_argv[1]));
+    else if(strcmp(prog_name, "cd") == 0)  status = get_status(chdir(prog_argv[1]), -2);
+    else if(fork() == 0) status = get_status(execvp(prog_name, prog_argv), -3);
     else wait(&status);
     
     return status;
@@ -76,22 +73,19 @@ void run_command(node_t *node)
     /* Print parsed input for testing - comment this when running the tests! */
 
    
-    int status;
     if (prompt)
         prompt = "vush$ ";
 
-
+    
     switch (node->type)
     {
     case NODE_COMMAND:
-    
         exec_cmd_print_err(node);
         break;
-    case NODE_SEQUENCE:
-        while(node->type != NODE_COMMAND){
-            exec_cmd(node->sequence.first);
-            node = node->sequence.second;
-        }
+    case NODE_SEQUENCE: 
+        exec_cmd(node->sequence.first);
+        run_command(node->sequence.second);
+        break;
     
     default:
         break;

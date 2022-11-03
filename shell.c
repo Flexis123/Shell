@@ -9,6 +9,8 @@
 #include <signal.h>
 
 #define PROMPT_NAME "vush$ "
+#define PIPE_RD 0
+#define PIPE_WR 1
 
 void sigint(int signum){
     if(signum == SIGINT) {
@@ -70,7 +72,6 @@ int exec_cmd_print_err(node_t *node){
 void run_command(node_t *node)
 {
     /* Print parsed input for testing - comment this when running the tests! */
-
    
     if (prompt)
         prompt = PROMPT_NAME;
@@ -84,6 +85,43 @@ void run_command(node_t *node)
     case NODE_SEQUENCE: 
         exec_cmd(node->sequence.first);
         run_command(node->sequence.second);
+        break;
+
+    case NODE_PIPE:;
+        int p[2];
+        pipe(p);
+        
+            pid_t lpid = fork();
+            int lpid_status;
+            if(lpid == 0){
+                close(p[PIPE_RD]);
+                close(STDOUT_FILENO);
+                dup(p[PIPE_WR]);
+
+                node_t* cmd1 = node->pipe.parts[0];
+                lpid_status = execvp(cmd1->command.program, cmd1->command.argv);
+            }
+
+            pid_t rpid = fork();
+            int rpid_status;
+            if(rpid == 0){
+                close(p[PIPE_WR]);
+                close(STDIN_FILENO);
+                dup(p[PIPE_RD]);
+
+                node_t* cmd1 = node->pipe.parts[1];
+                rpid_status = execvp(cmd1->command.program, cmd1->command.argv);
+            }
+
+            waitpid(lpid, &lpid_status, 0);
+            waitpid(rpid, &rpid_status, 0);
+
+            if(lpid < 0 || rpid < 0){
+                print_err(lpid_status);
+                print_err(rpid_status);
+                return;
+            }
+        
         break;
     
     default:

@@ -106,31 +106,38 @@ void run_command(node_t *node)
 
             lid = fork();
             if(lid == 0){
-                close(p[PIPE_RD]);
-                close(STDOUT_FILENO);
-                dup(p[PIPE_WR]);
+                if(close(p[PIPE_RD]) || close(STDOUT_FILENO)) {
+                    perror("error on replacing STD IO with pipe IO");
+                    exit(-1);
+                }
+                else if(dup(p[PIPE_WR]) == -1) {
+                    perror("error on pipe write end dupe");
+                    exit(-1);
+                }
+                else if(exec_cmd(node->pipe.parts[i], pipe_work) == -1) {
+                    perror("lhs");
+                    exit(-1);
+                }else exit(0);
+                
 
-                lid_status = exec_cmd_print_err(node->pipe.parts[i], pipe_work);
             }
             
             rid = fork();
             if(rid == 0){
-                close(p[PIPE_WR]);
-                close(STDIN_FILENO);
-                dup(p[PIPE_RD]);
+                if(close(p[PIPE_WR]) || close(STDIN_FILENO)) perror("error on replacing STD IO with pipe IO");
+                else if(dup(p[PIPE_RD]) == -1) perror("error on pipe read end dupe");
+                else if(exec_cmd(node->pipe.parts[i + 1], pipe_work) == -1) {
+                    perror("rhs");
+                    exit(-1);
+                }else exit(0);
 
-                rid_status = exec_cmd_print_err(node->pipe.parts[i + 1], pipe_work);
             }
 
             close(p[PIPE_RD]);
             close(p[PIPE_WR]);
 
-            waitpid(lid, &lid_status, 0);
-            if(lid_status < 0) kill(rid, SIGKILL);
-            waitpid(rid, &rid_status, 0);
-            if(rid_status < 0) return;
-
-            
+            waitpid(lid, NULL, 0);
+            waitpid(rid, NULL, 0);   
         }
         
         break;

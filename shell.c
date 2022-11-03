@@ -14,8 +14,7 @@
 
 void sigint(int signum){
     if(signum == SIGINT) {
-        printf("SIGINT\n");
-       // prompt = PROMPT_NAME;
+        printf("Ctrl+C user terminated program\n");
     }
     
 }
@@ -49,25 +48,36 @@ void print_err(int status){
 }
 
 
-int exec_cmd(node_t *node)
+int exec_cmd(node_t *node, int (*exec)(char*, char**))
 {
-    int status; 
+    int status = 0; 
     char* prog_name = node->command.program;
     char** prog_argv = node->command.argv;
 
     if(strcmp(prog_name, "exit") == 0) exit(atoi(prog_argv[1]));
     else if(strcmp(prog_name, "cd") == 0)  status = get_status(chdir(prog_argv[1]), -2);
-    else if(fork() == 0) status = get_status(execvp(prog_name, prog_argv), -3);
-    else wait(&status);
+    else if(exec != NULL) status = exec(prog_name, prog_argv);
     
     return status;
 }
 
-int exec_cmd_print_err(node_t *node){
-    int status = exec_cmd(node);
+int exec_cmd_print_err(node_t *node, int (*exec)(char*, char**)){
+    int status = exec_cmd(node, exec);
     if (status < 0) print_err(status);
     return status;
 }
+
+int cmd_work(char* prog_name, char** argv){
+    int status = 0;
+    if(fork() == 0) status = get_status(execvp(prog_name, argv), -3);
+    else wait(&status);
+    return status;
+}
+
+int pipe_work(char* prog_name, char** argv){
+    return execvp(prog_name, argv);
+}
+
 
 void run_command(node_t *node)
 {
@@ -80,47 +90,48 @@ void run_command(node_t *node)
     switch (node->type)
     {
     case NODE_COMMAND:
-        exec_cmd_print_err(node);
+        exec_cmd_print_err(node, cmd_work);
         break;
     case NODE_SEQUENCE: 
-        exec_cmd(node->sequence.first);
+        exec_cmd_print_err(node->sequence.first, cmd_work);
         run_command(node->sequence.second);
         break;
 
     case NODE_PIPE:;
-        int p[2];
-        pipe(p);
-        
-            pid_t lpid = fork();
-            int lpid_status;
-            if(lpid == 0){
+        pid_t lid, rid;
+        int lid_status, rid_status;
+        for(size_t i = 0; i < node->pipe.n_parts - 1; i++){
+            int p[2];
+            pipe(p);
+
+            lid = fork();
+            if(lid == 0){
                 close(p[PIPE_RD]);
                 close(STDOUT_FILENO);
                 dup(p[PIPE_WR]);
 
-                node_t* cmd1 = node->pipe.parts[0];
-                lpid_status = execvp(cmd1->command.program, cmd1->command.argv);
+                lid_status = exec_cmd_print_err(node->pipe.parts[i], pipe_work);
             }
-
-            pid_t rpid = fork();
-            int rpid_status;
-            if(rpid == 0){
+            
+            rid = fork();
+            if(rid == 0){
                 close(p[PIPE_WR]);
                 close(STDIN_FILENO);
                 dup(p[PIPE_RD]);
 
-                node_t* cmd1 = node->pipe.parts[1];
-                rpid_status = execvp(cmd1->command.program, cmd1->command.argv);
+                rid_status = exec_cmd_print_err(node->pipe.parts[i + 1], pipe_work);
             }
 
-            waitpid(lpid, &lpid_status, 0);
-            waitpid(rpid, &rpid_status, 0);
+            close(p[PIPE_RD]);
+            close(p[PIPE_WR]);
 
-            if(lpid < 0 || rpid < 0){
-                print_err(lpid_status);
-                print_err(rpid_status);
-                return;
-            }
+            waitpid(lid, &lid_status, 0);
+            if(lid_status < 0) kill(rid, SIGKILL);
+            waitpid(rid, &rid_status, 0);
+            if(rid_status < 0) return;
+
+            
+        }
         
         break;
     

@@ -8,12 +8,12 @@
 #include <stdlib.h>
 #include <signal.h>
 
-int exec_pipe[2];
+#define PROMPT_NAME "vush$ "
 
 void sigint(int signum){
     if(signum == SIGINT) {
         printf("SIGINT\n");
-
+       // prompt = PROMPT_NAME;
     }
     
 }
@@ -22,9 +22,8 @@ void initialize(void)
 {
     /* This code will be called once at startup */
     if (prompt)
-        prompt = "vush$ ";
+        prompt = PROMPT_NAME;
 
-    pipe(exec_pipe);
     signal(SIGINT, sigint);
 }
 
@@ -74,7 +73,7 @@ void run_command(node_t *node)
 
    
     if (prompt)
-        prompt = "vush$ ";
+        prompt = PROMPT_NAME;
 
     
     switch (node->type)

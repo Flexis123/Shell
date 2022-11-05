@@ -97,7 +97,10 @@ int exec_subshell(node_t *node){
     int status = -1;
 
     if(pid == -1) perror("problem with subshell process");
-    else if(pid == 0) run_command(node->subshell.child);
+    else if(pid == 0) {
+        run_command(node->subshell.child);
+        exit(0);
+    }
     else wait(&status);
 
     return status;

@@ -92,6 +92,17 @@ void exec_pipe(node_t *node){
     }
 }
 
+int exec_subshell(node_t *node){
+    pid_t pid = fork();
+    int status = -1;
+
+    if(pid == -1) perror("problem with subshell process");
+    else if(pid == 0) run_command(node->subshell.child);
+    else wait(&status);
+
+    return status;
+}
+
 void run_command(node_t *node)
 {
     /* Print parsed input for testing - comment this when running the tests! */
@@ -99,8 +110,6 @@ void run_command(node_t *node)
     if (prompt)
         prompt = PROMPT_NAME;
 
-
-    
     switch (node->type)
     {
     case NODE_COMMAND:
@@ -113,6 +122,10 @@ void run_command(node_t *node)
 
     case NODE_PIPE:
         exec_pipe(node);
+        break;
+
+    case NODE_SUBSHELL:
+        exec_subshell(node);
         break;
 
     default:

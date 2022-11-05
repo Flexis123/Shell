@@ -30,7 +30,7 @@ void initialize(void)
     signal(SIGINT, sigint);
 }
 
-int exec_cmd(node_t *node, int fork_exec)
+int exec_cmd(node_t *node)
 {
     int status = 0; 
     char* prog_name = node->command.program;
@@ -38,13 +38,9 @@ int exec_cmd(node_t *node, int fork_exec)
 
     if(strcmp(prog_name, "exit") == 0) exit(atoi(prog_argv[1]));
     else if(strcmp(prog_name, "cd") == 0)  status = chdir(prog_argv[1]);
-    else if(fork_exec == 1){
-        if(fork() == 0) status = execvp(prog_name, prog_argv);
-        else wait(&status);
-    }else{
-        status = execvp(prog_name, prog_argv);
-    }
-
+    else if(fork() == 0) status = execvp(prog_name, prog_argv);
+    else wait(&status);
+   
     if(status == -1) perror(prog_name);
     
     return status;
@@ -108,7 +104,7 @@ void run_command(node_t *node)
     switch (node->type)
     {
     case NODE_COMMAND:
-        exec_cmd(node, 1);
+        exec_cmd(node);
         break;
     case NODE_SEQUENCE: 
         run_command(node->sequence.first);

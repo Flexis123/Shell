@@ -7,6 +7,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <poll.h>
 
 #define PROMPT_NAME "vush$ "
 #define PIPE_RD 0
@@ -28,7 +30,7 @@ void initialize(void)
     signal(SIGINT, sigint);
 }
 
-int exec_cmd(node_t *node, int (*exec)(char*, char**))
+int exec_cmd(node_t *node, int fork_exec)
 {
     int status = 0; 
     char* prog_name = node->command.program;
@@ -36,7 +38,12 @@ int exec_cmd(node_t *node, int (*exec)(char*, char**))
 
     if(strcmp(prog_name, "exit") == 0) exit(atoi(prog_argv[1]));
     else if(strcmp(prog_name, "cd") == 0)  status = chdir(prog_argv[1]);
-    else if(exec != NULL) status = exec(prog_name, prog_argv);
+    else if(fork_exec == 1){
+        if(fork() == 0) status = execvp(prog_name, prog_argv);
+        else wait(&status);
+    }else{
+        status = execvp(prog_name, prog_argv);
+    }
 
     if(status == -1) perror(prog_name);
     
@@ -44,22 +51,50 @@ int exec_cmd(node_t *node, int (*exec)(char*, char**))
 }
 
 
-int cmd_work(char* prog_name, char** argv){
-    int status = 0;
-    if(fork() == 0) status = execvp(prog_name, argv);
-    else wait(&status);
-    return status;
-}
+void exec_pipe(node_t *node){
+    int p[2];
+    pid_t pid;
+    int fd_in = STDIN_FILENO;
 
-int pipe_work(char* prog_name, char** argv){
-    return execvp(prog_name, argv);
-}
+    pid_t childs[node->pipe.n_parts];
 
-void perr_exit(const char* msg){
-    perror(msg);
-    exit(-1);
-}
+    for(size_t i = 0; i < node->pipe.n_parts; i++){
+        pipe(p);
 
+        pid = fork();
+        if(pid == -1){
+            perror("problem with creating new child for pipeline process");
+            break;
+        }else if(pid == 0){
+            int child_pipe_io_status = dup2(fd_in, STDIN_FILENO);
+
+            if(i + 1 < node->pipe.n_parts){
+                child_pipe_io_status += dup2(p[PIPE_WR], STDOUT_FILENO);
+            }
+            child_pipe_io_status += close(p[PIPE_RD]);
+
+            if(child_pipe_io_status < 0){
+                perror("Problem with replacing STD IO with Pipe IO ABORTING");
+                break;
+            }
+
+            node_t* part = node->pipe.parts[i];
+            run_command(part);
+            exit(0);
+        }else{
+            childs[i] = pid;
+            if(close(p[PIPE_WR]) < 0){
+                perror("Problem with replacing STD IO with Pipe IO ABORTING");
+                break;
+            }
+            fd_in = p[PIPE_RD];
+        }
+    }
+
+    for(size_t i = 0; i < node->pipe.n_parts; i++){
+        waitpid(childs[i], NULL, 0);
+    }
+}
 
 void run_command(node_t *node)
 {
@@ -68,55 +103,24 @@ void run_command(node_t *node)
     if (prompt)
         prompt = PROMPT_NAME;
 
+
     
     switch (node->type)
     {
     case NODE_COMMAND:
-        exec_cmd(node, cmd_work);
+        exec_cmd(node, 1);
         break;
     case NODE_SEQUENCE: 
-        exec_cmd(node->sequence.first, cmd_work);
+        run_command(node->sequence.first);
         run_command(node->sequence.second);
         break;
 
-    case NODE_PIPE:;
-        pid_t lid, rid;
-        
-        for(size_t i = 0; i < node->pipe.n_parts - 1; i++){
-
-            int p[2];
-            if(pipe(p) < 0){
-                perror("Problem with creating pipe");
-                break;
-            }
-
-            lid = fork();
-            if(lid == 0){
-                if(close(p[PIPE_RD]) || close(STDOUT_FILENO)) perr_exit("error on replacing STD IO with pipe IO");
-                else if(dup(p[PIPE_WR]) == -1) perr_exit("error on pipe write end dupe");
-                else if(exec_cmd(node->pipe.parts[i], pipe_work) == -1) perr_exit("problem with lhs pipe program"); 
-                else exit(0);
-            }
-            
-            rid = fork();
-            if(rid == 0){
-                if(close(p[PIPE_WR]) || close(STDIN_FILENO)) perr_exit("error on replacing STD IO with pipe IO");
-                else if(dup(p[PIPE_RD]) == -1) perr_exit("error on pipe read end dupe");
-                else if(exec_cmd(node->pipe.parts[i + 1], pipe_work) == -1) perr_exit("problem with lhs pipe program");
-                else exit(0);
-
-            }
-
-            close(p[PIPE_RD]);
-            close(p[PIPE_WR]);
-
-            waitpid(lid, NULL, 0);
-            waitpid(rid, NULL, 0);   
-        }
-        
+    case NODE_PIPE:
+        exec_pipe(node);
         break;
-    
+
     default:
-        break;
+        perror("Invalid command shell input");
     }
+        
 }

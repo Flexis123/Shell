@@ -14,6 +14,8 @@
 #define PIPE_RD 0
 #define PIPE_WR 1
 
+extern char **environ;
+
 void sigint(int signum){
     if(signum == SIGINT) {
         printf("Ctrl+C user terminated program\n");
@@ -38,6 +40,15 @@ int exec_cmd(node_t *node)
 
     if(strcmp(prog_name, "exit") == 0) exit(atoi(prog_argv[1]));
     else if(strcmp(prog_name, "cd") == 0)  status = chdir(prog_argv[1]);
+    else if(strcmp(prog_name, "set") == 0) 
+    {
+        char* var = strtok(prog_argv[1], "=");
+        char* var_val = strtok(NULL, "=");
+
+        status = setenv(var, var_val, 1);
+
+    }
+    else if(strcmp(prog_name, "unset") == 0) status = unsetenv(prog_argv[1]);
     else if(fork() == 0) status = execvp(prog_name, prog_argv);
     else wait(&status);
    
@@ -109,7 +120,7 @@ int exec_subshell(node_t *node){
 void run_command(node_t *node)
 {
     /* Print parsed input for testing - comment this when running the tests! */
-   
+
     if (prompt)
         prompt = PROMPT_NAME;
 
@@ -118,6 +129,7 @@ void run_command(node_t *node)
     case NODE_COMMAND:
         exec_cmd(node);
         break;
+
     case NODE_SEQUENCE: 
         run_command(node->sequence.first);
         run_command(node->sequence.second);

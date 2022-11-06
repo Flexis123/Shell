@@ -10,25 +10,66 @@
 #include <fcntl.h>
 #include <poll.h>
 
-#define PROMPT_NAME "vush$ "
+#define DEFAULT_PROMPT_NAME "vush$ "
 #define PIPE_RD 0
 #define PIPE_WR 1
 
-extern char **environ;
+void sigint(int signum)
+{
+    if(signum == SIGINT) printf("Ctrl+C user terminated program\n");
+}
 
-void sigint(int signum){
-    if(signum == SIGINT) {
-        printf("Ctrl+C user terminated program\n");
+void prompt_cat(char* src, size_t *dest_end, size_t src_n){
+    size_t f = 0;
+    for(size_t i = *dest_end + 1; i <= *dest_end + src_n; i++){
+        prompt[i] = src[f];
+        f++;
     }
-    
+    *dest_end += sizeof(src);
+}
+
+void set_prompt_name()
+{
+    char* new_prompt = getenv("PS1");
+
+
+    if(!new_prompt) prompt = DEFAULT_PROMPT_NAME;
+    else{
+        prompt = malloc(1024 * sizeof(char*));
+        memset(prompt, '\0', 1024);
+        char* tok = strtok(new_prompt, "\\");
+        
+        if(tok != NULL)
+        {
+            strcpy(prompt, tok);
+
+            while((tok = strtok(NULL, "\\")))
+            { 
+
+                if(tok[0] == 'u')
+                {
+                    strcat(prompt, "username");
+                    strcat(prompt, tok + 1);
+                }
+                else if(tok[0] == 'h')
+                {
+                    strcat(prompt, "hostname");
+                    strcat(prompt, tok + 1);
+                }
+                else if(tok[0] == 'w')
+                {
+                    strcat(prompt, "cwd");
+                    strcat(prompt, tok + 1);
+                }
+                else strcat(prompt, tok);
+            }
+        }
+    }
 }
 
 void initialize(void)
 {
-    /* This code will be called once at startup */
-    if (prompt)
-        prompt = PROMPT_NAME;
-
+    set_prompt_name();
     signal(SIGINT, sigint);
 }
 
@@ -43,11 +84,12 @@ int exec_cmd(node_t *node)
     else if(strcmp(prog_name, "set") == 0) 
     {
         char* var = strtok(prog_argv[1], "=");
-        char* var_val = strtok(NULL, "=");
+        char* var_val = strtok(NULL, "\"");
 
         status = setenv(var, var_val, 1);
 
     }
+    else if(strcmp(prog_name, "get") == 0) printf("%s\n", getenv("NAME"));
     else if(strcmp(prog_name, "unset") == 0) status = unsetenv(prog_argv[1]);
     else if(fork() == 0) status = execvp(prog_name, prog_argv);
     else wait(&status);
@@ -103,7 +145,7 @@ void exec_pipe(node_t *node){
     }
 }
 
-int exec_subshell(node_t *node){
+int exec_subshell(node_t *node, int detached){
     pid_t pid = fork();
     int status = -1;
 
@@ -112,17 +154,13 @@ int exec_subshell(node_t *node){
         run_command(node->subshell.child);
         exit(0);
     }
-    else wait(&status);
+    else if(detached != 1) wait(&status);
 
     return status;
 }
 
 void run_command(node_t *node)
 {
-    /* Print parsed input for testing - comment this when running the tests! */
-
-    if (prompt)
-        prompt = PROMPT_NAME;
 
     switch (node->type)
     {
@@ -140,11 +178,20 @@ void run_command(node_t *node)
         break;
 
     case NODE_SUBSHELL:
-        exec_subshell(node);
+        exec_subshell(node, 0);
+        break;
+
+    case NODE_REDIRECT:
+        print_tree(node);
+        break;
+
+    case NODE_DETACH:;
+        exec_subshell(node, 1);
         break;
 
     default:
         perror("Invalid command shell input");
     }
         
+    set_prompt_name();
 }

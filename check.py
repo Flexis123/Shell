@@ -317,6 +317,7 @@ class InteractiveShell():
         self.last_prompt = None
         self.shell = pexpect.spawn(STUDENT_SHELL, encoding='utf-8', timeout=5,
                 echo=False, env=env)
+
         self.shell.setwinsize(10, 1024) # Otherwise long prompts get truncated
         self.wait_for_prompt()
 
@@ -585,7 +586,7 @@ def test_exit():
 
 
 def test_prompt(prompt):
-    # Insert some randomness in the prompt to prevent hardcoding.
+    # Insert some randomness in the prompt to prevent hardcoding.test_prompt
     while '$r' in prompt:
         prompt = prompt.replace('$r', randstring(3), 1)
 

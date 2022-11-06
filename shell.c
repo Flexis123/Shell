@@ -48,17 +48,17 @@ void set_prompt_name()
 
                 if(tok[0] == 'u')
                 {
-                    strcat(prompt, "username");
+                    strcat(prompt, getlogin());
                     strcat(prompt, tok + 1);
                 }
                 else if(tok[0] == 'h')
                 {
-                    strcat(prompt, "hostname");
+                    strcat(prompt, getenv("NAME"));
                     strcat(prompt, tok + 1);
                 }
                 else if(tok[0] == 'w')
                 {
-                    strcat(prompt, "cwd");
+                    strcat(prompt, getenv("PWD"));
                     strcat(prompt, tok + 1);
                 }
                 else strcat(prompt, tok);
@@ -68,7 +68,16 @@ void set_prompt_name()
 }
 
 void initialize(void)
-{
+{   
+    
+    if(getenv("USER") == NULL){
+        char **s = __environ;
+
+        for (; *s; s++) {
+            printf("%s\n", *s);
+        }
+    }
+    
     set_prompt_name();
     signal(SIGINT, sigint);
 }
@@ -161,6 +170,7 @@ int exec_subshell(node_t *node, int detached){
 
 void run_command(node_t *node)
 {
+    set_prompt_name();
 
     switch (node->type)
     {
@@ -192,6 +202,4 @@ void run_command(node_t *node)
     default:
         perror("Invalid command shell input");
     }
-        
-    set_prompt_name();
 }

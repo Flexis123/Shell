@@ -19,19 +19,16 @@ void sigint(int signum)
     if(signum == SIGINT) printf("Ctrl+C user terminated program\n");
 }
 
-void prompt_cat(char* src, size_t *dest_end, size_t src_n){
-    size_t f = 0;
-    for(size_t i = *dest_end + 1; i <= *dest_end + src_n; i++){
-        prompt[i] = src[f];
-        f++;
-    }
-    *dest_end += sizeof(src);
+
+char* add_env_var(char* tok, char* env_name){
+    strcat(prompt, getenv(env_name));
+    tok++;
+    return tok;
 }
 
 void set_prompt_name()
 {
     char* new_prompt = getenv("PS1");
-
 
     if(!new_prompt) prompt = DEFAULT_PROMPT_NAME;
     else{
@@ -46,37 +43,31 @@ void set_prompt_name()
             while((tok = strtok(NULL, "\\")))
             { 
 
-                if(tok[0] == 'u')
-                {
-                    strcat(prompt, getlogin());
-                    strcat(prompt, tok + 1);
-                }
-                else if(tok[0] == 'h')
-                {
-                    strcat(prompt, getenv("NAME"));
-                    strcat(prompt, tok + 1);
-                }
-                else if(tok[0] == 'w')
-                {
-                    strcat(prompt, getenv("PWD"));
-                    strcat(prompt, tok + 1);
-                }
-                else strcat(prompt, tok);
+                if(tok[0] == 'u') tok = add_env_var(tok, "USER");
+                else if(tok[0] == 'h') tok = add_env_var(tok, "NAME");
+                else if(tok[0] == 'w') tok = add_env_var(tok, "PWD");
+                strcat(prompt, tok);
             }
         }
+
+        //printf("%s\n", prompt);
     }
 }
 
 void initialize(void)
 {   
-    
+    /*
     if(getenv("USER") == NULL){
-        char **s = __environ;
-
+        extern char **environ;
+        char **s = environ;
         for (; *s; s++) {
             printf("%s\n", *s);
         }
     }
+
+    if (prompt)
+        prompt = "vush$ ";
+    */
     
     set_prompt_name();
     signal(SIGINT, sigint);
@@ -89,7 +80,10 @@ int exec_cmd(node_t *node)
     char** prog_argv = node->command.argv;
 
     if(strcmp(prog_name, "exit") == 0) exit(atoi(prog_argv[1]));
-    else if(strcmp(prog_name, "cd") == 0)  status = chdir(prog_argv[1]);
+    else if(strcmp(prog_name, "cd") == 0){
+        status = chdir(prog_argv[1]);
+        if(status == 0) status = setenv("PWD", prog_argv[1], 1);
+    } 
     else if(strcmp(prog_name, "set") == 0) 
     {
         char* var = strtok(prog_argv[1], "=");
@@ -170,7 +164,19 @@ int exec_subshell(node_t *node, int detached){
 
 void run_command(node_t *node)
 {
-    set_prompt_name();
+    /*
+    if(getenv("USER") == NULL){
+        extern char **environ;
+        char **s = environ;
+        for (; *s; s++) {
+            printf("%s\n", *s);
+        }
+    }
+    
+
+    if (prompt)
+        prompt = "vush$ ";
+    */
 
     switch (node->type)
     {
@@ -202,4 +208,6 @@ void run_command(node_t *node)
     default:
         perror("Invalid command shell input");
     }
+
+    set_prompt_name();
 }

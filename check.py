@@ -311,6 +311,8 @@ class InteractiveShell():
     """Wrapper around pexpect for interacting with a shell (as if a user is
     typing commands)."""
 
+    
+
     def __init__(self, env=None):
         self.last_command = ''
         self.last_output = ''
@@ -596,7 +598,9 @@ def test_prompt(prompt):
                      .replace('\h', socket.gethostname())\
                      .replace('\w', cwd or os.getcwd())
     def test_prompt_inner():
-        shell = InteractiveShell(env={'PS1': prompt})
+        env = dict(os.environ)
+        env.update({'PS1': prompt})
+        shell = InteractiveShell(env=env)
         if shell.last_prompt != expected_prompt():
             raise TestError('Prompt incorrect for "%s", expected "%s", got '
                     '"%s"' % (prompt, expected_prompt(), shell.last_prompt))

@@ -123,8 +123,7 @@ void exec_pipe(node_t *node){
             if(i + 1 < node->pipe.n_parts){
                 child_pipe_io_status += dup2(p[PIPE_WR], STDOUT_FILENO);
             }
-            child_pipe_io_status += close(p[PIPE_RD]);
-
+            
             if(child_pipe_io_status < 0){
                 perror("Problem with replacing STD IO with Pipe IO ABORTING");
                 break;
@@ -133,18 +132,56 @@ void exec_pipe(node_t *node){
             node_t* part = node->pipe.parts[i];
             run_command(part);
             exit(0);
-        }else{
-            childs[i] = pid;
-            if(close(p[PIPE_WR]) < 0){
-                perror("Problem with replacing STD IO with Pipe IO ABORTING");
-                break;
-            }
-            fd_in = p[PIPE_RD];
         }
+        childs[i] = pid;
+        if(close(p[PIPE_WR]) < 0){
+            perror("Problem with replacing STD IO with Pipe IO ABORTING");
+            break;
+        }
+        fd_in = p[PIPE_RD];
+        
     }
 
     for(size_t i = 0; i < node->pipe.n_parts; i++){
         waitpid(childs[i], NULL, 0);
+    }
+}
+
+void exec_pipe2(node_t *node){
+    size_t fsd_size = node->pipe.n_parts * 2;
+    int fds[fsd_size];
+    fds[0] = STDIN_FILENO;
+    fds[fsd_size - 1] = STDOUT_FILENO;
+
+    int p[2];
+    for(size_t i = 1; i < fsd_size - 1; i += 2){
+        pipe(p);
+        fds[i] = p[PIPE_WR];
+        fds[i + 1] = p[PIPE_RD];
+    }
+    
+    size_t child_count = node->pipe.n_parts;
+    pid_t children[child_count];
+    for(size_t i = 0; i < child_count; i++){
+        int j = i * 2;
+        pid_t pid = fork();
+        if(pid == -1){
+            perror("error with process when piping aborting");
+            return;
+        }else if(pid == 0){
+            dup2(fds[j], STDIN_FILENO);
+            dup2(fds[j + 1], STDOUT_FILENO);
+
+            run_command(node->pipe.parts[i]);
+            exit(0);
+        }
+
+        if(i + 1 != child_count) close(fds[j + 1]);
+        children[i] = pid;
+    }
+
+    for(size_t i = 0; i < node->pipe.n_parts; i++){
+        waitpid(children[i], NULL, 0);
     }
 }
 
@@ -190,7 +227,7 @@ void run_command(node_t *node)
         break;
 
     case NODE_PIPE:
-        exec_pipe(node);
+        exec_pipe2(node);
         break;
 
     case NODE_SUBSHELL:
